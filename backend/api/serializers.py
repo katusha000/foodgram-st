@@ -10,16 +10,17 @@ import base64
 
 from rest_framework import serializers
 from django.contrib.auth import password_validation
-from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.files.base import ContentFile
+
+MAX_PASSWORD_LENGTH = 128
 
 
 class Base64ImageField(serializers.ImageField):
     def to_internal_value(self, data):
-        if isinstance(data, str) and data.startswith('data:image'):
-            format, imgstr = data.split(';base64,')
-            ext = format.split('/')[-1]
-            data = ContentFile(base64.b64decode(imgstr), name='temp.' + ext)
+        if isinstance(data, str) and data.startswith("data:image"):
+            format, imgstr = data.split(";base64,")
+            ext = format.split("/")[-1]
+            data = ContentFile(base64.b64decode(imgstr), name="temp." + ext)
         return super().to_internal_value(data)
 
 
@@ -50,10 +51,7 @@ class IngredientInRecipeCreateSerializer(serializers.ModelSerializer):
         source="ingredient"
     )
     amount = serializers.IntegerField(
-        validators=[
-            MaxValueValidator(MAX_INGREDIENT),
-            MinValueValidator(MIN_INGREDIENT)
-        ]
+        min_value=MIN_INGREDIENT, max_value=MAX_INGREDIENT
     )
 
     class Meta:
@@ -136,7 +134,7 @@ class FollowSerializer(UserDetailSerializer):
 
     def get_recipes(self, obj):
         queryset = obj.recipes.all()
-        if limit := self.context['request'].query_params.get('recipes_limit'):
+        if limit := self.context["request"].query_params.get("recipes_limit"):
             queryset = queryset[:int(limit)] if limit.isdigit() else queryset
         return BriefRecipesSerializer(
             queryset, many=True, context=self.context).data
@@ -151,19 +149,21 @@ class AvatarUpdateSerializer(serializers.ModelSerializer):
 
 
 class PasswordUpdateSerializer(serializers.Serializer):
-    current_password = serializers.CharField(max_length=128, required=True)
-    new_password = serializers.CharField(max_length=128, required=True)
+    current_password = serializers.CharField(
+        max_length=MAX_PASSWORD_LENGTH, required=True)
+    new_password = serializers.CharField(
+        max_length=MAX_PASSWORD_LENGTH, required=True)
 
     def validate(self, data):
         user = self.context["request"].user
-        if not user.check_password(data['current_password']):
+        if not user.check_password(data["current_password"]):
             raise serializers.ValidationError({
-                'current_password': "Текущий пароль неверный."
+                "current_password": "Текущий пароль неверный."
             })
-        password_validation.validate_password(data['new_password'])
-        if user.check_password(data['new_password']):
+        password_validation.validate_password(data["new_password"])
+        if user.check_password(data["new_password"]):
             raise serializers.ValidationError({
-                'new_password': "Пароль совпадает со старым."
+                "new_password": "Пароль совпадает со старым."
             })
 
         return data
@@ -189,10 +189,7 @@ class RecipesSerializer(serializers.ModelSerializer):
     is_favorited = serializers.SerializerMethodField()
     is_in_shopping_cart = serializers.SerializerMethodField()
     cooking_time = serializers.IntegerField(
-        validators=[
-            MinValueValidator(MIN_TIME),
-            MaxValueValidator(MAX_TIME)
-        ]
+        min_value=MIN_TIME, max_value=MAX_TIME
     )
 
     class Meta:
@@ -206,7 +203,7 @@ class RecipesSerializer(serializers.ModelSerializer):
     def validate_image(self, value):
         if not value:
             raise serializers.ValidationError(
-                'Обязательно добавьте фото рецепта.'
+                "Обязательно добавьте фото рецепта."
             )
         return value
 
@@ -226,11 +223,11 @@ class RecipesSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
-        if self.context.get('request').method == 'PATCH':
+        if self.context.get("request").method == "PATCH":
             required_fields = {
-                'ingredients',
-                'name', 'image',
-                'text', 'cooking_time'
+                "ingredients",
+                "name", "image",
+                "text", "cooking_time"
             }
             missing_fields = required_fields - data.keys()
             if missing_fields:
@@ -241,14 +238,14 @@ class RecipesSerializer(serializers.ModelSerializer):
         return data
 
     def get_is_in_shopping_cart(self, obj):
-        user = self.context.get('request').user
+        user = self.context["request"].user
         return (
             user.is_authenticated
             and user.shopping_cart.filter(recipe=obj).exists()
         )
 
     def get_is_favorited(self, obj):
-        user = self.context.get('request').user
+        user = self.context["request"].user
         return (
             user.is_authenticated
             and user.favorite_recipes.filter(recipe=obj).exists()
@@ -257,7 +254,10 @@ class RecipesSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         ingredients_data = validated_data.pop("ingredients")
         recipe = Recipes.objects.create(**validated_data)
+        self._save_ingredients(recipe, ingredients_data)
+        return recipe
 
+    def _save_ingredients(self, recipe, ingredients_data):
         recipe_ingredients = [
             IngredientInRecipe(
                 recipe=recipe,
@@ -268,16 +268,14 @@ class RecipesSerializer(serializers.ModelSerializer):
         ]
         IngredientInRecipe.objects.bulk_create(recipe_ingredients)
 
-        return recipe
-
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation.update({
-            'ingredients': IngredientInRecipeSerializer(
+            "ingredients": IngredientInRecipeSerializer(
                 instance.recipe_ingredients.all(),
                 many=True
             ).data,
-            'image': representation.get('image') or ''
+            "image": representation.get("image") or ""
         })
         return representation
 
@@ -290,15 +288,6 @@ class RecipesSerializer(serializers.ModelSerializer):
 
         if ingredients_data is not None:
             instance.ingredients.clear()
-
-            recipe_ingredients = [
-                IngredientInRecipe(
-                    recipe=instance,
-                    ingredient=ingredient["ingredient"],
-                    amount=ingredient["amount"],
-                )
-                for ingredient in ingredients_data
-            ]
-            IngredientInRecipe.objects.bulk_create(recipe_ingredients)
+            self._save_ingredients(instance, ingredients_data)
 
         return instance

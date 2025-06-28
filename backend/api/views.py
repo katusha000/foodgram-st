@@ -1,3 +1,4 @@
+from .utils import encode36
 from users.models import Follow, User
 from recipes.models import (
     Ingredients,
@@ -23,7 +24,6 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.urls import reverse
 from django.http import HttpResponse
 from django.db.models import Sum, F
-from django.shortcuts import get_object_or_404, redirect
 
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
@@ -33,28 +33,6 @@ from rest_framework.permissions import (
 )
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.response import Response
-
-ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz'
-
-
-def encode36(number):
-    if number < 0:
-        raise ValueError("Число должно быть положительным.")
-    if number == 0:
-        return "0"
-    number36 = ''
-
-    while number:
-        number, i = divmod(number, 36)
-        number36 = ALPHABET[i] + number36
-
-    return number36
-
-
-def s_redirect(request, id):
-    id = int(id, 36)
-    recipe = get_object_or_404(Recipes, id=id)
-    return redirect(f"/recipes/{recipe.id}/")
 
 
 class UsersViewSet(viewsets.ModelViewSet):
@@ -235,7 +213,7 @@ class RecipesViewSet(viewsets.ModelViewSet):
         permission_classes=[IsAuthenticated],
     )
     def download_shopping_list(self, request):
-        cart_items = request.user.shopping_cart.select_related('recipe')
+        cart_items = request.user.shopping_cart.select_related("recipe")
         recipe_ids = [item.recipe_id for item in cart_items]
 
         needed_ingredients = (

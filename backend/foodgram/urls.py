@@ -21,7 +21,7 @@ from django.urls import path, include
 from django.conf.urls.static import static
 from django.conf import settings
 
-from api.views import s_redirect
+from api.utils import s_redirect
 
 
 urlpatterns = [
