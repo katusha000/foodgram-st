@@ -11,7 +11,7 @@ admin.site.register(IngredientInRecipe)
 
 class RecipeIngredientInline(admin.TabularInline):
     model = IngredientInRecipe
-    autocomplete_fields = ("ingredient__name",)
+    autocomplete_fields = ("ingredient",)
     min_num = 1
     extra = 1
 
@@ -25,7 +25,7 @@ class RecipeAdmin(admin.ModelAdmin):
         "pub_date",
         "get_favorite_count",
     )
-    autocomplete_fields = ("author__username",)
+    autocomplete_fields = ("author",)
     search_fields = ("name", "author__username")
     list_filter = ("name", "pub_date")
     inlines = (RecipeIngredientInline,)
